@@ -113,16 +113,17 @@ class QueryObject:
             match = True
             for key, value in kwargs.items():
 
-                # Equals
-                if key in child and not child[key] == value:
+                if key in child and child[key] != value:
                     match = False
                     break
 
                 # Intersection Position
-                if key == "intersect":
-                    if (child.get("position", 0) > value or
-                       child.get("position", 0) + (child.get("end", 0) - child.get("start", 0)) < value):
-                        match = False
+                if key == "intersect" and (
+                    child.get("position", 0) > value
+                    or child.get("position", 0) + (child.get("end", 0) - child.get("start", 0)) < value
+                ):
+                    match = False
+
 
             # Add matched record
             if match:
@@ -310,6 +311,11 @@ class Track(QueryObject):
         """ Take any arguments given as filters, and find the first matching object """
         return QueryObject.get(Track, **kwargs)
 
+    def __lt__(self, other):
+        return self.data.get('number', 0) < other.data.get('number', 0)
+
+    def __gt__(self, other):
+        return self.data.get('number', 0) > other.data.get('number', 0)
 
 class Effect(QueryObject):
     """ This class allows Effects to be queried, updated, and deleted from the project data. """
@@ -341,7 +347,7 @@ class Effect(QueryObject):
                         # Loop through all kwargs (and look for matches)
                         match = True
                         for key, value in kwargs.items():
-                            if key in child and not child[key] == value:
+                            if key in child and child[key] != value:
                                 match = False
                                 break
 

@@ -25,15 +25,13 @@
  along with OpenShot Library.  If not, see <http://www.gnu.org/licenses/>.
  """
 
-import os
 from PyQt5.QtCore import QMimeData, QSize, QPoint, Qt, pyqtSlot, QRegExp
-from PyQt5.QtGui import *
+from PyQt5.QtGui import QDrag
 from PyQt5.QtWidgets import QListView
 
 import openshot  # Python module for libopenshot (required video editing module installed separately)
 from classes.query import File
 from classes.app import get_app
-from classes.settings import get_settings
 from classes.logger import log
 import json
 
@@ -61,7 +59,6 @@ class EmojisListView(QListView):
         drag.setPixmap(icon.pixmap(QSize(self.drag_item_size, self.drag_item_size)))
         drag.setHotSpot(QPoint(self.drag_item_size / 2, self.drag_item_size / 2))
 
-
         # Create emoji file before drag starts
         data = json.loads(drag.mimeData().text())
         file = self.add_file(data[0])
@@ -76,13 +73,14 @@ class EmojisListView(QListView):
         drag.exec_()
 
     def add_file(self, filepath):
-        filename = os.path.basename(filepath)
-
         # Add file into project
-        app = get_app()
-        _ = get_app()._tr
 
-        # Check for this path in our existing project data["1F595-1F3FE", "/home/jonathan/apps/openshot-qt-git/src/emojis/color/svg/1F595-1F3FE.svg"]
+        app = get_app()
+        _ = app._tr
+
+        # Check for this path in our existing project data
+        # ["1F595-1F3FE",
+        # "openshot-qt-git/src/emojis/color/svg/1F595-1F3FE.svg"]
         file = File.get(path=filepath)
 
         # If this file is already found, exit
@@ -117,7 +115,7 @@ class EmojisListView(QListView):
         self.group_model.setFilterKeyColumn(1)
 
         # Save current emoji filter to settings
-        s = get_settings()
+        s = get_app().get_settings()
         setting_emoji_group = s.get('emoji_group_filter') or 'smileys-emotion'
         if setting_emoji_group != item:
             s.set('emoji_group_filter', item)
@@ -166,11 +164,8 @@ class EmojisListView(QListView):
         self.setStyleSheet('QListView::item { padding-top: 2px; }')
 
         # Get default emoji filter group
-        s = get_settings()
+        s = get_app().get_settings()
         default_type = s.get('emoji_group_filter') or 'smileys-emotion'
-
-        # Load initial emoji model data
-        self.emojis_model.update_model()
 
         # setup filter events
         self.win.emojisFilter.textChanged.connect(self.filter_changed)
@@ -186,7 +181,6 @@ class EmojisListView(QListView):
                 # Off by one, due to 'show all' choice above
                 dropdown_index = index + 1
 
-        if not self.win.mode == "unittest":
+        if self.win.mode != "unittest":
             self.win.emojiFilterGroup.currentIndexChanged.connect(self.group_changed)
         self.win.emojiFilterGroup.setCurrentIndex(dropdown_index)
-

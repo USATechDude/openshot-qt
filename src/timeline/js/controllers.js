@@ -56,11 +56,9 @@ App.controller("TimelineCtrl", function ($scope) {
 
   // Additional variables used to control the rendering of HTML
   $scope.pixelsPerSecond = parseFloat($scope.project.tick_pixels) / parseFloat($scope.project.scale);
-  $scope.playheadOffset = 0;
   $scope.playhead_animating = false;
   $scope.playhead_height = 300;
   $scope.playheadTime = secondsToTime($scope.project.playhead_position, $scope.project.fps.num, $scope.project.fps.den);
-  $scope.shift_pressed = false;
   $scope.snapline_position = 0.0;
   $scope.snapline = false;
   $scope.enable_snapping = true;
@@ -72,16 +70,18 @@ App.controller("TimelineCtrl", function ($scope) {
   $scope.enable_sorting = true;
   $scope.ThumbServer = "http://127.0.0.1/";
 
-  // Method to set if Qt is detected (which clears demo data)
+  // Method to set if Qt is detected (which clears demo data
+  // and updates the document_is_ready variable in openshot-qt)
   $scope.Qt = false;
   $scope.enableQt = function () {
     $scope.Qt = true;
-    timeline.qt_log("$scope.Qt = true;");
+    timeline.qt_log("DEBUG", "$scope.Qt = true;");
+    timeline.page_ready();
   };
 
   $scope.setThumbAddress = function (url) {
     $scope.ThumbServer = url;
-    timeline.qt_log("setThumbAddress: " + url);
+    timeline.qt_log("DEBUG", "setThumbAddress: " + url);
   };
 
   // Move the playhead to a specific time
@@ -91,8 +91,8 @@ App.controller("TimelineCtrl", function ($scope) {
     $scope.playheadTime = secondsToTime(position_seconds, $scope.project.fps.num, $scope.project.fps.den);
 
     // Use JQuery to move playhead (for performance reasons) - scope.apply is too expensive here
-    $(".playhead-top").css("left", (($scope.project.playhead_position * $scope.pixelsPerSecond) + $scope.playheadOffset) + "px");
-    $(".playhead-line").css("left", (($scope.project.playhead_position * $scope.pixelsPerSecond) + $scope.playheadOffset) + "px");
+    $(".playhead-top").css("left", ($scope.project.playhead_position * $scope.pixelsPerSecond) + "px");
+    $(".playhead-line").css("left", ($scope.project.playhead_position * $scope.pixelsPerSecond) + "px");
     $("#ruler_time").text($scope.playheadTime.hour + ":" + $scope.playheadTime.min + ":" + $scope.playheadTime.sec + ":" + $scope.playheadTime.frame);
   };
 
@@ -106,11 +106,6 @@ App.controller("TimelineCtrl", function ($scope) {
     // Determine seconds
     var frames_per_second = $scope.project.fps.num / $scope.project.fps.den;
     var position_seconds = ((position_frames - 1) / frames_per_second);
-
-    // Center on the playhead if it has moved out of view and the timeline should follow it
-    if ($scope.enable_playhead_follow && !$scope.isTimeVisible(position_seconds)) {
-      $scope.centerOnTime(position_seconds);
-    }
 
     // Update internal scope (in seconds)
     $scope.movePlayhead(position_seconds);
@@ -279,8 +274,24 @@ App.controller("TimelineCtrl", function ($scope) {
     });
 
     // Scroll back to correct cursor time (minus the difference of the cursor location)
-    var new_cursor_x = Math.round((cursor_time * $scope.pixelsPerSecond) - center_x);
+    var new_cursor_x = Math.max(0, Math.round((cursor_time * $scope.pixelsPerSecond) - center_x));
+    scrolling_tracks.scrollLeft(new_cursor_x + 1); // force scroll event
     scrolling_tracks.scrollLeft(new_cursor_x);
+  };
+
+  // Change the scale and apply to scope
+  $scope.setScroll = function (normalizedScrollValue) {
+    var timeline_length = Math.min(32767, $scope.getTimelineWidth(0));
+    var scrolling_tracks = $("#scrolling_tracks");
+    var horz_scroll_offset = normalizedScrollValue * timeline_length;
+    scrolling_tracks.scrollLeft(horz_scroll_offset);
+  };
+
+  // Scroll the timeline horizontally of a certain amount (scrol_value)
+  $scope.scrollLeft = function (scroll_value) {
+    var scrolling_tracks = $("#scrolling_tracks");
+    var horz_scroll_offset = scrolling_tracks.scrollLeft();
+    scrolling_tracks.scrollLeft(horz_scroll_offset + scroll_value);
   };
 
   // Center the timeline on a given time position
@@ -307,7 +318,16 @@ App.controller("TimelineCtrl", function ($scope) {
     // Find matching clip, update thumbnail to same path (to force reload)
     var clip_selector = $("#clip_" + clip_id + " .thumb");
     var existing_thumb_path = clip_selector.attr("src");
-    timeline.qt_log(existing_thumb_path);
+    var thumb_url_parts = existing_thumb_path.split("?");
+    if (thumb_url_parts.length > 1) {
+      // Trim off any previous cache buster
+      existing_thumb_path = thumb_url_parts[0];
+    }
+
+    // Append cache buster, since QtWebEngine seems to aggressively cache images
+    existing_thumb_path += "?" + Math.random();
+
+    timeline.qt_log("DEBUG", existing_thumb_path);
     clip_selector.attr("src", existing_thumb_path);
   };
 
@@ -321,7 +341,7 @@ App.controller("TimelineCtrl", function ($scope) {
           $scope.project.clips[clip_index].audio_data = audio_data;
           $scope.project.clips[clip_index].show_audio = true;
         });
-        timeline.qt_log("Audio data successful set on clip JSON");
+        timeline.qt_log("DEBUG", "Audio data successful set on clip JSON");
         break;
       }
 
@@ -455,11 +475,13 @@ App.controller("TimelineCtrl", function ($scope) {
       var start_second = parseFloat(progress[p]["start"]) / fps;
       var stop_second = parseFloat(progress[p]["end"]) / fps;
 
-      //figure out the actual pixel position
-      var start_pixel = start_second * $scope.pixelsPerSecond;
-      var stop_pixel = stop_second * $scope.pixelsPerSecond;
+      //figure out the actual pixel position, constrained by max width
+      var start_pixel = $scope.canvasMaxWidth(start_second * $scope.pixelsPerSecond);
+      var stop_pixel = $scope.canvasMaxWidth(stop_second * $scope.pixelsPerSecond);
       var rect_length = stop_pixel - start_pixel;
-
+      if (rect_length < 1) {
+        break;
+      }
       //get the element and draw the rects
       ctx.beginPath();
       ctx.rect(start_pixel, 0, rect_length, 5);
@@ -506,32 +528,44 @@ App.controller("TimelineCtrl", function ($scope) {
     // Trim clip_id
     var id = clip_id.replace("clip_", "");
 
-    // Clear transitions also (if needed)
-    if (id !== "" && clear_selections) {
-      $scope.selectTransition("", clear_selections);
-      $scope.selectEffect("", clear_selections);
+    // Is CTRL pressed?
+    var is_ctrl = event && event.ctrlKey;
+
+    // Clear transitions selection if needed
+    if (id !== "" && clear_selections && !is_ctrl) {
+      $scope.selectTransition("", true);
     }
     // Call slice method and exit (don't actually select the clip)
     if (id !== "" && $scope.enable_razor) {
       if ($scope.Qt) {
-        var cursor_seconds = $scope.getJavaScriptPosition(event.clientX);
+        var cursor_seconds = $scope.getJavaScriptPosition(event.clientX, null).position;
         timeline.RazorSliceAtCursor(id, "", cursor_seconds);
       }
       // Don't actually select clip
       return;
     }
-    // Is CTRL pressed?
-    var is_ctrl = false;
-    if (event && event.ctrlKey) {
-      is_ctrl = true;
-    }
 
-    // Unselect all clips
+    // Update selection for clips
     for (var clip_index = 0; clip_index < $scope.project.clips.length; clip_index++) {
       if ($scope.project.clips[clip_index].id === id) {
-        $scope.project.clips[clip_index].selected = true;
-        if ($scope.Qt) {
-          timeline.addSelection(id, "clip", clear_selections);
+        // Invert selection if CTRL is pressed and not forced add and already selected
+        if (is_ctrl && clear_selections && ($scope.project.clips[clip_index].selected === true)) {
+          $scope.project.clips[clip_index].selected = false;
+          if ($scope.Qt) {
+            timeline.removeSelection($scope.project.clips[clip_index].id, "clip");
+          }
+        }
+        else {
+          $scope.project.clips[clip_index].selected = true;
+          if ($scope.Qt) {
+            // Do not clear selection if CTRL is pressed
+            if (is_ctrl) {
+              timeline.addSelection(id, "clip", false);
+            }
+            else {
+              timeline.addSelection(id, "clip", clear_selections);
+            }
+          }
         }
       }
       else if (clear_selections && !is_ctrl) {
@@ -548,33 +582,44 @@ App.controller("TimelineCtrl", function ($scope) {
     // Trim tran_id
     var id = tran_id.replace("transition_", "");
 
-    // Clear clips also (if needed)
-    if (id !== "" && clear_selections) {
+    // Is CTRL pressed?
+    var is_ctrl = event && event.ctrlKey;
+
+    // Clear clips selection if needed
+    if (id !== "" && clear_selections && !is_ctrl) {
       $scope.selectClip("", true);
-      $scope.selectEffect("", true);
     }
     // Call slice method and exit (don't actually select the transition)
     if (id !== "" && $scope.enable_razor) {
       if ($scope.Qt) {
-        var cursor_seconds = $scope.getJavaScriptPosition(event.clientX);
+        var cursor_seconds = $scope.getJavaScriptPosition(event.clientX, null).position;
         timeline.RazorSliceAtCursor("", id, cursor_seconds);
       }
       // Don't actually select transition
       return;
     }
 
-    // Is CTRL pressed?
-    var is_ctrl = false;
-    if (event && event.ctrlKey) {
-      is_ctrl = true;
-    }
-
-    // Unselect all transitions
+    // Update selection for transitions
     for (var tran_index = 0; tran_index < $scope.project.effects.length; tran_index++) {
       if ($scope.project.effects[tran_index].id === id) {
-        $scope.project.effects[tran_index].selected = true;
-        if ($scope.Qt) {
-          timeline.addSelection(id, "transition", clear_selections);
+        // Invert selection if CTRL is pressed and not forced add and already selected
+        if (is_ctrl && clear_selections && ($scope.project.effects[tran_index].selected === true)) {
+          $scope.project.effects[tran_index].selected = false;
+          if ($scope.Qt) {
+            timeline.removeSelection($scope.project.effects[tran_index].id, "transition");
+          }
+        }
+        else {
+          $scope.project.effects[tran_index].selected = true;
+          if ($scope.Qt) {
+            // Do not clear selection if CTRL is pressed
+            if (is_ctrl) {
+              timeline.addSelection(id, "transition", false);
+            }
+            else {
+              timeline.addSelection(id, "transition", clear_selections);
+            }
+          }
         }
       }
       else if (clear_selections && !is_ctrl) {
@@ -595,7 +640,7 @@ App.controller("TimelineCtrl", function ($scope) {
     var has_video = clip["reader"]["has_video"];
     var has_audio = clip["reader"]["has_audio"];
     if (!has_video && has_audio) {
-      return "../images/AudioThumbnail.png";
+      return "../images/AudioThumbnail.svg";
     }
     var file_fps = clip["reader"]["fps"]["num"] / clip["reader"]["fps"]["den"];
     return $scope.ThumbServer + clip.file_id + "/" + ((file_fps * clip.start) + 1) + "/";
@@ -606,6 +651,11 @@ App.controller("TimelineCtrl", function ($scope) {
     if ($scope.Qt) {
       timeline.addSelection(effect_id, "effect", true);
     }
+  };
+
+  // Constrain canvas width values to under 32Kpixels
+  $scope.canvasMaxWidth = function (desired_width) {
+    return Math.min(32767, desired_width);
   };
 
 // Find the furthest right edge on the timeline (and resize it if too small)
@@ -631,7 +681,7 @@ App.controller("TimelineCtrl", function ($scope) {
 // Show clip context menu
   $scope.showClipMenu = function (clip_id, event) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showClipMenu");
+      timeline.qt_log("DEBUG", "$scope.showClipMenu");
       $scope.selectClip(clip_id, false, event);
       timeline.ShowClipMenu(clip_id);
     }
@@ -640,7 +690,7 @@ App.controller("TimelineCtrl", function ($scope) {
 // Show clip context menu
   $scope.showEffectMenu = function (effect_id) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showEffectMenu");
+      timeline.qt_log("DEBUG", "$scope.showEffectMenu");
       timeline.ShowEffectMenu(effect_id);
     }
   };
@@ -648,7 +698,7 @@ App.controller("TimelineCtrl", function ($scope) {
 // Show transition context menu
   $scope.showTransitionMenu = function (tran_id, event) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showTransitionMenu");
+      timeline.qt_log("DEBUG", "$scope.showTransitionMenu");
       $scope.selectTransition(tran_id, false, event);
       timeline.ShowTransitionMenu(tran_id);
     }
@@ -657,7 +707,7 @@ App.controller("TimelineCtrl", function ($scope) {
 // Show track context menu
   $scope.showTrackMenu = function (layer_id) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showTrackMenu");
+      timeline.qt_log("DEBUG", "$scope.showTrackMenu");
       timeline.ShowTrackMenu(layer_id);
     }
   };
@@ -665,7 +715,7 @@ App.controller("TimelineCtrl", function ($scope) {
 // Show marker context menu
   $scope.showMarkerMenu = function (marker_id) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showMarkerMenu");
+      timeline.qt_log("DEBUG", "$scope.showMarkerMenu");
       timeline.ShowMarkerMenu(marker_id);
     }
   };
@@ -673,7 +723,7 @@ App.controller("TimelineCtrl", function ($scope) {
   // Show playhead context menu
   $scope.showPlayheadMenu = function (position) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.qt_log("$scope.showPlayheadMenu");
+      timeline.qt_log("DEBUG", "$scope.showPlayheadMenu");
       timeline.ShowPlayheadMenu(position);
     }
   };
@@ -681,7 +731,7 @@ App.controller("TimelineCtrl", function ($scope) {
   // Show timeline context menu
   $scope.showTimelineMenu = function (e, layer_number) {
     if ($scope.Qt && !$scope.enable_razor) {
-      timeline.ShowTimelineMenu($scope.getJavaScriptPosition(e.pageX), layer_number);
+      timeline.ShowTimelineMenu($scope.getJavaScriptPosition(e.pageX, null).position, layer_number);
     }
   };
 
@@ -713,11 +763,11 @@ App.controller("TimelineCtrl", function ($scope) {
   };
 
 
-  // Get Position of item (used by Qt)
+  // Get Position of item (used by Qt), both the position and track number.
   /**
-   * @return {number}
+   * @return {object}
    */
-  $scope.getJavaScriptPosition = function (x) {
+  $scope.getJavaScriptPosition = function (x, y) {
     // Adjust for scrollbar position
     var scrolling_tracks = $("#scrolling_tracks");
     var horz_scroll_offset = scrolling_tracks.scrollLeft();
@@ -730,8 +780,14 @@ App.controller("TimelineCtrl", function ($scope) {
       clip_position = 0;
     }
 
+    // Get track at y position (if y passed in)
+    var track = 0;
+    if (y) {
+      track = $scope.getJavaScriptTrack(y);
+    }
+
     // Return position in seconds
-    return clip_position;
+    return { "position": clip_position, "track": track };
   };
 
   // Get Track number of item (used by Qt)
@@ -890,28 +946,26 @@ App.controller("TimelineCtrl", function ($scope) {
   $scope.updateLayerIndex = function () {
 
     if ($scope.Qt) {
-      timeline.qt_log("updateLayerIndex");
+      timeline.qt_log("DEBUG", "updateLayerIndex");
     }
 
     var scrolling_tracks = $("#scrolling_tracks");
     var vert_scroll_offset = scrolling_tracks.scrollTop();
 
-    $scope.$apply(function () {
-      // Loop through each layer
-      for (var layer_index = 0; layer_index < $scope.project.layers.length; layer_index++) {
-        var layer = $scope.project.layers[layer_index];
+    // Loop through each layer
+    for (var layer_index = 0; layer_index < $scope.project.layers.length; layer_index++) {
+      var layer = $scope.project.layers[layer_index];
 
-        // Find element on screen (bound to this layer)
-        var layer_elem = $("#track_" + layer.number);
-        if (layer_elem) {
-          // Update the top offset
-          layer.y = layer_elem.offset().top + vert_scroll_offset;
-        }
+      // Find element on screen (bound to this layer)
+      var layer_elem = $("#track_" + layer.number);
+      if (layer_elem.offset()) {
+        // Update the top offset
+        layer.y = layer_elem.offset().top + vert_scroll_offset;
       }
-      // Update playhead height
-      $scope.playhead_height = $("#track-container").height();
-      $(".playhead-line").height($scope.playhead_height);
-    });
+    }
+    // Update playhead height
+    $scope.playhead_height = $("#track-container").height();
+    $(".playhead-line").height($scope.playhead_height);
   };
 
   // Sort clips and transitions by position
@@ -922,7 +976,7 @@ App.controller("TimelineCtrl", function ($scope) {
     }
 
     if ($scope.Qt) {
-      timeline.qt_log("sortItems");
+      timeline.qt_log("DEBUG", "sortItems");
 
       $scope.$evalAsync(function () {
         // Sort by position second
@@ -1337,6 +1391,9 @@ App.controller("TimelineCtrl", function ($scope) {
     // Re-index Layer Y values
     $scope.updateLayerIndex();
 
+    // Force a scroll event (from 1 to 0, to send the geometry to zoom slider)
+    $("#scrolling_tracks").scrollLeft(1);
+
     // Scroll to top/left when loading a project
     $("#scrolling_tracks").animate({
       scrollTop: 0,
@@ -1378,7 +1435,10 @@ App.controller("TimelineCtrl", function ($scope) {
         images: {start: 3, end: 7},
         show_audio: false,
         alpha: {Points: []},
-        location_x: {Points: []},
+        location_x: {Points: [
+				  {co: {X: 1.0, Y: -0.5}},
+          {co: {X: 30.0, Y: -0.4}}
+        ]},
         location_y: {Points: []},
         scale_x: {Points: []},
         scale_y: {Points: []},

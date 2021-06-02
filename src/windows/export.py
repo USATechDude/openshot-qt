@@ -29,18 +29,19 @@ import locale
 import os
 import time
 import tempfile
+import math
 
 import openshot
 
 # Try to get the security-patched XML functions from defusedxml
 try:
-  from defusedxml import minidom as xml
+    from defusedxml import minidom as xml
 except ImportError:
-  from xml.dom import minidom as xml
+    from xml.dom import minidom as xml
 
 from xml.parsers.expat import ExpatError
 
-from PyQt5.QtCore import Qt, QCoreApplication, QTimer, QSize
+from PyQt5.QtCore import Qt, QCoreApplication, QTimer, QSize, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QMessageBox, QDialog, QFileDialog, QDialogButtonBox, QPushButton
 )
@@ -48,7 +49,7 @@ from PyQt5.QtGui import QIcon
 
 from classes import info
 from classes import ui_util
-from classes import settings
+from classes import openshot_rc  # noqa
 from classes.logger import log
 from classes.app import get_app
 from classes.metrics import track_metric_screen, track_metric_error
@@ -63,28 +64,25 @@ class Export(QDialog):
     # Path to ui file
     ui_path = os.path.join(info.PATH, 'windows', 'ui', 'export.ui')
 
-    def __init__(self):
+    ExportStarted = pyqtSignal(str, int, int)
+    ExportFrame = pyqtSignal(str, int, int, int, str)
+    ExportEnded = pyqtSignal(str)
 
-        # Create dialog class
-        QDialog.__init__(self)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        # Load UI from designer
+        # Load UI from designer & init
         ui_util.load_ui(self, self.ui_path)
-
-        # Init UI
         ui_util.init_ui(self)
 
-        # get translations
+        # get translations & settings
         _ = get_app()._tr
+        self.s = get_app().get_settings()
 
-        # Get settings
-        self.s = settings.get_settings()
-
-        # Track metrics
         track_metric_screen("export-screen")
 
         # Dynamically load tabs from settings data
-        self.settings_data = settings.get_settings().get_all_settings()
+        self.settings_data = self.s.get_all_settings()
 
         # Add buttons to interface
         self.cancel_button = QPushButton(_('Cancel'))
@@ -101,42 +99,44 @@ class Export(QDialog):
         self.delayed_fps_timer = None
         self.delayed_fps_timer = QTimer()
         self.delayed_fps_timer.setInterval(200)
+        self.delayed_fps_timer.setSingleShot(True)
         self.delayed_fps_timer.timeout.connect(self.delayed_fps_callback)
-        self.delayed_fps_timer.stop()
 
         # Pause playback (to prevent crash since we are fixing to change the timeline's max size)
         get_app().window.actionPlay_trigger(None, force="pause")
-
-        # Clear timeline preview cache (to get more available memory)
-        get_app().window.timeline_sync.timeline.ClearAllCache()
 
         # Hide audio channels
         self.lblChannels.setVisible(False)
         self.txtChannels.setVisible(False)
 
         # Set OMP thread disabled flag (for stability)
-        openshot.Settings.Instance().WAIT_FOR_VIDEO_PROCESSING_TASK = True
         openshot.Settings.Instance().HIGH_QUALITY_SCALING = True
 
+        project_timeline = get_app().window.timeline_sync.timeline
+
+        # Clear timeline preview cache (to get more available memory)
+        project_timeline.ClearAllCache()
+
         # Get the original timeline settings
-        width = get_app().window.timeline_sync.timeline.info.width
-        height = get_app().window.timeline_sync.timeline.info.height
-        fps = get_app().window.timeline_sync.timeline.info.fps
-        sample_rate = get_app().window.timeline_sync.timeline.info.sample_rate
-        channels = get_app().window.timeline_sync.timeline.info.channels
-        channel_layout = get_app().window.timeline_sync.timeline.info.channel_layout
+        width = project_timeline.info.width
+        height = project_timeline.info.height
+        fps = project_timeline.info.fps
+        sample_rate = project_timeline.info.sample_rate
+        channels = project_timeline.info.channels
+        channel_layout = project_timeline.info.channel_layout
 
         # Create new "export" openshot.Timeline object
-        self.timeline = openshot.Timeline(width, height, openshot.Fraction(fps.num, fps.den),
-                                          sample_rate, channels, channel_layout)
+        self.timeline = openshot.Timeline(
+            width, height, openshot.Fraction(fps.num, fps.den),
+            sample_rate, channels, channel_layout)
         # Init various properties
-        self.timeline.info.channel_layout = get_app().window.timeline_sync.timeline.info.channel_layout
-        self.timeline.info.has_audio = get_app().window.timeline_sync.timeline.info.has_audio
-        self.timeline.info.has_video = get_app().window.timeline_sync.timeline.info.has_video
-        self.timeline.info.video_length = get_app().window.timeline_sync.timeline.info.video_length
-        self.timeline.info.duration = get_app().window.timeline_sync.timeline.info.duration
-        self.timeline.info.sample_rate = get_app().window.timeline_sync.timeline.info.sample_rate
-        self.timeline.info.channels = get_app().window.timeline_sync.timeline.info.channels
+        self.timeline.info.sample_rate = sample_rate
+        self.timeline.info.channels = channels
+        self.timeline.info.channel_layout = channel_layout
+        self.timeline.info.has_audio = project_timeline.info.has_audio
+        self.timeline.info.has_video = project_timeline.info.has_video
+        self.timeline.info.video_length = project_timeline.info.video_length
+        self.timeline.info.duration = project_timeline.info.duration
 
         # Load the "export" Timeline reader with the JSON from the real timeline
         json_timeline = json.dumps(get_app().project._data)
@@ -201,7 +201,7 @@ class Export(QDialog):
         self.cboSimpleQuality.currentIndexChanged.connect(
             functools.partial(self.cboSimpleQuality_index_changed, self.cboSimpleQuality))
         self.cboChannelLayout.currentIndexChanged.connect(self.updateChannels)
-        get_app().window.ExportFrame.connect(self.updateProgressBar)
+        self.ExportFrame.connect(self.updateProgressBar)
 
         # ********* Advanced Profile List **********
         # Loop through profiles
@@ -227,20 +227,14 @@ class Export(QDialog):
         self.profile_names.sort()
 
         # Loop through sorted profiles
-        box_index = 0
         self.selected_profile_index = 0
-        for profile_name in self.profile_names:
-
+        for box_index, profile_name in enumerate(self.profile_names):
             # Add to dropdown
             self.cboProfile.addItem(self.getProfileName(self.getProfilePath(profile_name)), self.getProfilePath(profile_name))
 
             # Set default (if it matches the project)
             if get_app().project.get(['profile']) in profile_name:
                 self.selected_profile_index = box_index
-
-            # increment item counter
-            box_index += 1
-
 
         # ********* Simple Project Type **********
         # load the simple project type dropdown
@@ -259,14 +253,12 @@ class Export(QDialog):
                     log.error("Failed to parse file '%s' as a preset: %s" % (preset_path, e))
 
         # Exclude duplicates
-        type_index = 0
         selected_type = 0
         presets = list(set(presets))
-        for item in sorted(presets):
+        for type_index, item in enumerate(sorted(presets)):
             self.cboSimpleProjectType.addItem(item, item)
             if item == _("All Formats"):
                 selected_type = type_index
-            type_index += 1
 
         # Always select 'All Formats' option
         self.cboSimpleProjectType.setCurrentIndex(selected_type)
@@ -288,10 +280,8 @@ class Export(QDialog):
         self.updateFrameRate()
 
     def delayed_fps_callback(self):
-        """Callback for fps/profile changed event timer (to delay the timeline mapping so we don't spam libopenshot)"""
-        # Stop timer
-        self.delayed_fps_timer.stop()
-
+        """Callback for fps/profile changed event timer
+        (to delay the timeline mapping so we don't spam libopenshot)"""
         # Calculate fps
         fps_double = self.timeline.info.fps.ToDouble()
 
@@ -314,10 +304,11 @@ class Export(QDialog):
             if profile_path == path:
                 return profile
 
-    def updateProgressBar(self, title_message, start_frame, end_frame, current_frame):
+    @pyqtSlot(str, int, int, int, str)
+    def updateProgressBar(self, title_message, start_frame, end_frame, current_frame, format_of_progress_string):
         """Update progress bar during exporting"""
         if end_frame - start_frame > 0:
-            percentage_string = "%4.1f%% " % (( current_frame - start_frame ) / ( end_frame - start_frame ) * 100)
+            percentage_string = format_of_progress_string % (( current_frame - start_frame ) / ( end_frame - start_frame ) * 100)
         else:
             percentage_string = "100%"
         self.progressExportVideo.setValue(current_frame)
@@ -355,21 +346,12 @@ class Export(QDialog):
         self.timeline.info.channels = self.txtChannels.value()
         self.timeline.info.channel_layout = self.cboChannelLayout.currentData()
 
-        # Send changes to libopenshot (apply mappings to all framemappers)... after a small delay
+        # Send changes to libopenshot (apply mappings to all framemappers)
+        # Start or restart timer to process changes after a small delay
         self.delayed_fps_timer.start()
 
         # Determine max frame (based on clips)
-        timeline_length = 0.0
-        fps = self.timeline.info.fps.ToFloat()
-        clips = self.timeline.Clips()
-        for clip in clips:
-            clip_last_frame = clip.Position() + clip.Duration()
-            if clip_last_frame > timeline_length:
-                # Set max length of timeline
-                timeline_length = clip_last_frame
-
-        # Convert to int and round
-        self.timeline_length_int = round(timeline_length * fps) + 1
+        self.timeline_length_int = self.timeline.GetMaxFrame()
 
         # Set the min and max frame numbers for this project
         self.txtStartFrame.setValue(1)
@@ -471,12 +453,13 @@ class Export(QDialog):
 
         # Load the interlaced options
         self.cboInterlaced.clear()
-        self.cboInterlaced.addItem(_("Yes"), "Yes")
         self.cboInterlaced.addItem(_("No"), "No")
+        self.cboInterlaced.addItem(_("Yes Top field first"), "Yes")
+        self.cboInterlaced.addItem(_("Yes Bottom field first"), "Yes")
         if profile.info.interlaced_frame:
-            self.cboInterlaced.setCurrentIndex(0)
-        else:
             self.cboInterlaced.setCurrentIndex(1)
+        else:
+            self.cboInterlaced.setCurrentIndex(0)
 
     def cboSimpleTarget_index_changed(self, widget, index):
         selected_target = widget.itemData(index)
@@ -569,12 +552,10 @@ class Export(QDialog):
 
                                 self.txtAudioCodec.setText(audio_codec_name)
 
-                            layout_index = 0
-                            for layout in self.channel_layout_choices:
+                            for layout_index, layout in enumerate(self.channel_layout_choices):
                                 if layout == int(c[0].childNodes[0].data):
                                     self.cboChannelLayout.setCurrentIndex(layout_index)
                                     break
-                                layout_index += 1
 
                         # Free up DOM memory
                         xmldoc.unlink()
@@ -616,16 +597,12 @@ class Export(QDialog):
     def populateAllProfiles(self, selected_profile_path):
         """Populate the full list of profiles"""
         # Look for matching profile in advanced options
-        profile_index = 0
-        for profile_name in self.profile_names:
+        for profile_index, profile_name in enumerate(self.profile_names):
             # Check for matching profile
             if self.getProfilePath(profile_name) == selected_profile_path:
                 # Matched!
                 self.cboProfile.setCurrentIndex(profile_index)
                 break
-
-            # increment index
-            profile_index += 1
 
     def cboSimpleQuality_index_changed(self, widget, index):
         selected_quality = widget.itemData(index)
@@ -668,15 +645,15 @@ class Export(QDialog):
                 raw_number = locale.atof(raw_number_string)
 
                 if "kb" in raw_measurement:
-                    measurement = "kb"
+                    # Kbit to bytes
                     bit_rate_bytes = raw_number * 1000.0
 
                 elif "mb" in raw_measurement:
-                    measurement = "mb"
+                    # Mbit to bytes
                     bit_rate_bytes = raw_number * 1000.0 * 1000.0
 
-                elif "crf" in raw_measurement:
-                    measurement = "crf"
+                elif ("crf" in raw_measurement) or ("cqp" in raw_measurement):
+                    # Just a number
                     if raw_number > 63:
                         raw_number = 63
                     if raw_number < 0:
@@ -684,7 +661,7 @@ class Export(QDialog):
                     bit_rate_bytes = raw_number
 
                 elif "qp" in raw_measurement:
-                    measurement = "qp"
+                    # Just a number
                     if raw_number > 255:
                         raw_number = 255
                     if raw_number < 0:
@@ -719,6 +696,16 @@ class Export(QDialog):
 
     def accept(self):
         """ Start exporting video """
+
+        # Build the export window title
+        def titlestring(sec, fps, mess):
+            formatstr = "%(hours)d:%(minutes)02d:%(seconds)02d " + mess + " (%(fps)5.2f FPS)"
+            title_mes = _(formatstr) % {
+                'hours': sec / 3600,
+                'minutes': (sec / 60) % 60,
+                'seconds': sec % 60,
+                'fps': fps}
+            return title_mes
 
         # get translations
         _ = get_app()._tr
@@ -797,6 +784,7 @@ class Export(QDialog):
                 return
 
         # Init export settings
+        interlacedIndex = self.cboInterlaced.currentIndex()
         video_settings = {  "vformat": self.txtVideoFormat.text(),
                             "vcodec": self.txtVideoCodec.text(),
                             "fps": { "num" : self.txtFrameRateNum.value(), "den": self.txtFrameRateDen.value()},
@@ -805,7 +793,9 @@ class Export(QDialog):
                             "pixel_ratio": {"num": self.txtPixelRatioNum.value(), "den": self.txtPixelRatioDen.value()},
                             "video_bitrate": int(self.convert_to_bytes(self.txtVideoBitRate.text())),
                             "start_frame": self.txtStartFrame.value(),
-                            "end_frame": self.txtEndFrame.value()
+                            "end_frame": self.txtEndFrame.value(),
+                            "interlace": interlacedIndex in [1, 2],
+                            "topfirst": interlacedIndex == 1
                           }
 
         audio_settings = {"acodec": self.txtAudioCodec.text(),
@@ -861,8 +851,8 @@ class Export(QDialog):
                                   video_settings.get("height"),
                                   openshot.Fraction(video_settings.get("pixel_ratio").get("num"),
                                                     video_settings.get("pixel_ratio").get("den")),
-                                  False,
-                                  False,
+                                  video_settings.get("interlace"),
+                                  video_settings.get("topfirst"),
                                   video_settings.get("video_bitrate"))
 
             # Set audio options
@@ -886,11 +876,12 @@ class Export(QDialog):
             else:
                 # Muxing options for mp4/mov
                 w.SetOption(openshot.VIDEO_STREAM, "muxing_preset", "mp4_faststart")
-                # Set the quality in case crf was selected
+                # Set the quality in case crf, cqp or qp was selected
                 if "crf" in self.txtVideoBitRate.text():
                     w.SetOption(openshot.VIDEO_STREAM, "crf", str(int(video_settings.get("video_bitrate"))) )
-                # Set the quality in case qp was selected
-                if "qp" in self.txtVideoBitRate.text():
+                elif "cqp" in self.txtVideoBitRate.text():
+                    w.SetOption(openshot.VIDEO_STREAM, "cqp", str(int(video_settings.get("video_bitrate"))) )
+                elif "qp" in self.txtVideoBitRate.text():
                     w.SetOption(openshot.VIDEO_STREAM, "qp", str(int(video_settings.get("video_bitrate"))) )
 
 
@@ -899,28 +890,56 @@ class Export(QDialog):
 
             # Notify window of export started
             title_message = ""
-            get_app().window.ExportStarted.emit(export_file_path, video_settings.get("start_frame"), video_settings.get("end_frame"))
+            self.ExportStarted.emit(export_file_path, video_settings.get("start_frame"), video_settings.get("end_frame"))
 
             progressstep = max(1 , round(( video_settings.get("end_frame") - video_settings.get("start_frame") ) / 1000))
             start_time_export = time.time()
+            seconds_run = 0
             start_frame_export = video_settings.get("start_frame")
             end_frame_export = video_settings.get("end_frame")
+            last_exported_time = time.time()
+            last_displayed_exported_portion = 0.0
+            current_exported_portion = 0.0
+            digits_after_decimalpoint = 1
+            # Precision of the progress bar
+            format_of_progress_string = "%4.1f%% "
             # Write each frame in the selected range
             for frame in range(video_settings.get("start_frame"), video_settings.get("end_frame") + 1):
                 # Update progress bar (emit signal to main window)
-                if (frame % progressstep) == 0:
-                    end_time_export = time.time()
+                end_time_export = time.time()
+                if ((frame % progressstep) == 0) or ((end_time_export - last_exported_time) > 1):
+                    current_exported_portion = (frame - start_frame_export) * 1.0  / (end_frame_export - start_frame_export)
+                    if ((current_exported_portion - last_displayed_exported_portion) > 0.0):
+                        # the log10 of the difference of the fraction of the completed frames is the negativ
+                        # number of digits after the decimal point after which the first digit is not 0
+                        digits_after_decimalpoint = math.ceil( -2.0 - math.log10( current_exported_portion - last_displayed_exported_portion ))
+                    else:
+                        digits_after_decimalpoint = 1
+                    if digits_after_decimalpoint < 1:
+                        # We want at least 1 digit after the decimal point
+                        digits_after_decimalpoint = 1
+                    if digits_after_decimalpoint > 5:
+                        # We don't want not more than 5 difits after the decimal point
+                        digits_after_decimalpoint = 5
+                    last_displayed_exported_portion = current_exported_portion
+                    format_of_progress_string = "%4." + str(digits_after_decimalpoint) + "f%% "
+                    last_exported_time = time.time()
                     if ((( frame - start_frame_export ) != 0) & (( end_time_export - start_time_export ) != 0)):
                         seconds_left = round(( start_time_export - end_time_export )*( frame - end_frame_export )/( frame - start_frame_export ))
                         fps_encode = ((frame - start_frame_export)/(end_time_export-start_time_export))
-                        title_message = _("%(hours)d:%(minutes)02d:%(seconds)02d Remaining (%(fps)5.2f FPS)") % {
-                            'hours': seconds_left / 3600,
-                            'minutes': (seconds_left / 60) % 60,
-                            'seconds': seconds_left % 60,
-                            'fps': fps_encode}
+                        if frame == end_frame_export:
+                            title_message = _("Finalizing video export, please wait...")
+                        else:
+                            title_message = titlestring(seconds_left, fps_encode, "Remaining")
 
                     # Emit frame exported
-                    get_app().window.ExportFrame.emit(title_message, video_settings.get("start_frame"), video_settings.get("end_frame"), frame)
+                    self.ExportFrame.emit(
+                        title_message,
+                        video_settings.get("start_frame"),
+                        video_settings.get("end_frame"),
+                        frame,
+                        format_of_progress_string
+                    )
 
                     # Process events (to show the progress bar moving)
                     QCoreApplication.processEvents()
@@ -937,14 +956,15 @@ class Export(QDialog):
 
             # Emit final exported frame (with elapsed time)
             seconds_run = round((end_time_export - start_time_export))
-            title_message = _("%(hours)d:%(minutes)02d:%(seconds)02d Elapsed (%(fps)5.2f FPS)") % {
-                'hours': seconds_run / 3600,
-                'minutes': (seconds_run / 60) % 60,
-                'seconds': seconds_run % 60,
-                'fps': fps_encode}
+            title_message = titlestring(seconds_run, fps_encode, "Elapsed")
 
-            get_app().window.ExportFrame.emit(title_message, video_settings.get("start_frame"),
-                                              video_settings.get("end_frame"), frame)
+            self.ExportFrame.emit(
+                title_message,
+                video_settings.get("start_frame"),
+                video_settings.get("end_frame"),
+                frame,
+                format_of_progress_string
+            )
 
         except Exception as e:
             # TODO: Find a better way to catch the error. This is the only way I have found that
@@ -982,19 +1002,13 @@ class Export(QDialog):
             msg.exec_()
 
         # Notify window of export started
-        get_app().window.ExportEnded.emit(export_file_path)
+        self.ExportEnded.emit(export_file_path)
 
         # Close timeline object
         self.timeline.Close()
 
         # Clear all cache
         self.timeline.ClearAllCache()
-
-        # Re-set OMP thread enabled flag
-        if self.s.get("omp_threads_enabled"):
-            openshot.Settings.Instance().WAIT_FOR_VIDEO_PROCESSING_TASK = False
-        else:
-            openshot.Settings.Instance().WAIT_FOR_VIDEO_PROCESSING_TASK = True
 
         # Return scale mode to lower quality scaling (for faster previews)
         openshot.Settings.Instance().HIGH_QUALITY_SCALING = False
@@ -1007,6 +1021,17 @@ class Export(QDialog):
 
             # Reveal done button
             self.close_button.setVisible(True)
+
+            # Restore windows title to show elapsed time
+            title_message = titlestring(seconds_run, fps_encode, "Elapsed")
+
+            self.ExportFrame.emit(
+                title_message,
+                video_settings.get("start_frame"),
+                video_settings.get("end_frame"),
+                frame,
+                format_of_progress_string
+            )
 
             # Make progress bar green (to indicate we are done)
             from PyQt5.QtGui import QPalette
@@ -1024,21 +1049,14 @@ class Export(QDialog):
         if self.exporting and not self.close_button.isVisible():
             # Show confirmation dialog
             _ = get_app()._tr
-            result = QMessageBox.question(self,
+            result = QMessageBox.question(
+                self,
                 _("Export Video"),
                 _("Are you sure you want to cancel the export?"),
                 QMessageBox.No | QMessageBox.Yes)
             if result == QMessageBox.No:
                 # Resume export
                 return
-
-        # Re-set OMP thread enabled flag
-        # NOTE: This is always called when closing the export modal, and thus
-        # the keyframes are always scaled back to the original FPS if needed.
-        if self.s.get("omp_threads_enabled"):
-            openshot.Settings.Instance().WAIT_FOR_VIDEO_PROCESSING_TASK = False
-        else:
-            openshot.Settings.Instance().WAIT_FOR_VIDEO_PROCESSING_TASK = True
 
         # Return scale mode to lower quality scaling (for faster previews)
         openshot.Settings.Instance().HIGH_QUALITY_SCALING = False

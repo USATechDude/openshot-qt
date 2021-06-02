@@ -58,7 +58,7 @@ class TransitionFilterProxyModel(QSortFilterProxyModel):
             trans_name = self.sourceModel().data(index)  # transition name (i.e. Fade In)
 
             # Return, if regExp match in displayed format.
-            return "common" == group_name and self.filterRegExp().indexIn(trans_name) >= 0
+            return group_name == "common" and self.filterRegExp().indexIn(trans_name) >= 0
 
         # Continue running built-in parent filter logic
         return super(TransitionFilterProxyModel, self).filterAcceptsRow(sourceRow, sourceParent)
@@ -178,9 +178,9 @@ class TransitionsModel(QObject):
                         reader.Close()
                         clip.Close()
 
-                    except Exception as ex:
+                    except Exception:
                         # Handle exception
-                        log.warning('Invalid transition image file {}: {}'.format(filename, ex))
+                        log.debug('Invalid transition image file %s', filename, exc_info=1)
                         msg = QMessageBox()
                         msg.setText(_("{} is not a valid transition file.".format(filename)))
                         msg.exec_()

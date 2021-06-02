@@ -33,7 +33,6 @@ from PyQt5.QtCore import QLocale, QLibraryInfo, QTranslator, QCoreApplication
 
 from classes.logger import log
 from classes import info
-from classes import settings
 
 
 try:
@@ -75,7 +74,11 @@ def init_language():
                     ]
 
     # Get the user's configured language preference
-    preference_lang = settings.get_settings().get('default-language')
+    settings = app.get_settings()
+    if settings:
+        preference_lang = settings.get('default-language')
+    else:
+        preference_lang = "Default"
 
     # Output all languages detected from various sources
     log.info("Qt Detected Languages: {}".format(QLocale().system().uiLanguages()))
@@ -145,7 +148,7 @@ def get_all_languages():
             country_name = QLocale(locale_name).nativeCountryName().title()
             all_languages.append((locale_name, native_lang_name, country_name))
         except:
-            log.warning('Failed to parse language for %s' % locale_name)
+            log.debug('Failed to parse language for %s', locale_name)
 
     # Return list
     return all_languages

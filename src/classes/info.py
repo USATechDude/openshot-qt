@@ -61,6 +61,8 @@ PREVIEW_CACHE_PATH = os.path.join(USER_PATH, "preview-cache")
 USER_PROFILES_PATH = os.path.join(USER_PATH, "profiles")
 USER_PRESETS_PATH = os.path.join(USER_PATH, "presets")
 USER_TITLES_PATH = os.path.join(USER_PATH, "title_templates")
+PROTOBUF_DATA_PATH = os.path.join(USER_PATH, "protobuf_data")
+YOLO_PATH = os.path.join(USER_PATH, "yolo")
 # User files
 BACKUP_FILE = os.path.join(BACKUP_PATH, "backup.osp")
 USER_DEFAULT_PROJECT = os.path.join(USER_PATH, "default.project")
@@ -70,7 +72,8 @@ USER_DEFAULT_PROJECT = os.path.join(USER_PATH, "default.project")
 for folder in [
     USER_PATH, BACKUP_PATH, RECOVERY_PATH, THUMBNAIL_PATH, CACHE_PATH,
     BLENDER_PATH, TITLE_PATH, TRANSITIONS_PATH, PREVIEW_CACHE_PATH,
-    USER_PROFILES_PATH, USER_PRESETS_PATH, USER_TITLES_PATH, EMOJIS_PATH ]:
+    USER_PROFILES_PATH, USER_PRESETS_PATH, USER_TITLES_PATH, EMOJIS_PATH,
+    PROTOBUF_DATA_PATH, YOLO_PATH ]:
     if not os.path.exists(os.fsencode(folder)):
         os.makedirs(folder, exist_ok=True)
 
@@ -87,6 +90,13 @@ BLENDER_MIN_VERSION = "2.80"
 
 # Data-model debugging enabler
 MODEL_TEST = False
+
+# Default/initial logging levels
+LOG_LEVEL_FILE = 'INFO'
+LOG_LEVEL_CONSOLE = 'INFO'
+
+# Web backend selection, overridable at launch
+WEB_BACKEND = 'auto'
 
 # Languages
 CMDLINE_LANGUAGE = None
@@ -166,11 +176,8 @@ SETUP = {
 
 def website_language():
     """Get the current website language code for URLs"""
-    if CURRENT_LANGUAGE == "zh_CN":
-        return "zh-hans/"
-    elif CURRENT_LANGUAGE == "zh_TW":
-        return "zh-hant/"
-    elif CURRENT_LANGUAGE == "en_US":
-        return ""
-    else:
-        return "%s/" % CURRENT_LANGUAGE.split("_")[0].lower()
+    return {
+        "zh_CN": "zh-hans/",
+        "zh_TW": "zh-hant/",
+        "en_US": ""}.get(CURRENT_LANGUAGE,
+                         "%s/" % CURRENT_LANGUAGE.split("_")[0].lower())

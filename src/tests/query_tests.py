@@ -25,19 +25,33 @@
  along with OpenShot Library.  If not, see <http://www.gnu.org/licenses/>.
  """
 
-import sys, os
-# Import parent folder (so it can find other imports)
-PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-if not PATH in sys.path:
-    sys.path.append(PATH)
-
+import sys
+import os
 import random
 import unittest
 import uuid
+import json
+
+import openshot
+
+from PyQt5.QtGui import QGuiApplication
+try:
+    # QtWebEngineWidgets must be loaded prior to creating a QApplication
+    # But on systems with only WebKit, this will fail (and we ignore the failure)
+    from PyQt5.QtWebEngineWidgets import QWebEngineView
+except ImportError:
+    pass
+
+# Import parent folder (so it can find other imports)
+PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if PATH not in sys.path:
+    sys.path.append(PATH)
+
 from classes.app import OpenShotApp
 from classes import info
-import openshot  # Python module for libopenshot (required video editing module installed separately)
-import json
+
+
+app = None
 
 class TestQueryClass(unittest.TestCase):
     """ Unit test class for Query class """
@@ -46,7 +60,7 @@ class TestQueryClass(unittest.TestCase):
     def setUpClass(TestQueryClass):
         """ Init unit test data """
         # Create Qt application
-        TestQueryClass.app = OpenShotApp(sys.argv, mode="unittest")
+        TestQueryClass.app = QGuiApplication.instance()
         TestQueryClass.clip_ids = []
         TestQueryClass.file_ids = []
         TestQueryClass.transition_ids = []
@@ -105,8 +119,7 @@ class TestQueryClass(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         "Hook method for deconstructing the class fixture after running all tests in the class."
-        print ('Exiting Unittests: Quitting QApplication')
-        TestQueryClass.app.window.actionQuit.trigger()
+        TestQueryClass.app.quit()
 
     def test_add_clip(self):
         """ Test the Clip.save method by adding multiple clips """
@@ -304,7 +317,7 @@ class TestQueryClass(unittest.TestCase):
         # Insert into project data
         query_file = File()
         query_file.data = file_data
-        query_file.data["path"] = os.path.join(PATH, "images", "openshot.png")
+        query_file.data["path"] = os.path.join(info.IMAGES_PATH, "AboutLogo.png")
         query_file.data["media_type"] = "image"
         query_file.save()
 
@@ -317,5 +330,19 @@ class TestQueryClass(unittest.TestCase):
         self.assertEqual(len(File.filter()), num_files + 1)
 
 
-if __name__ == '__main__':
+def main():
+    global app
+    info.LOG_LEVEL_CONSOLE = "ERROR"
+    try:
+        app = OpenShotApp(sys.argv, mode="unittest")
+    except Exception:
+        import logging
+        log = logging.getLogger(".")
+        log.error("Failed to instantiate OpenShotApp", exc_info=1)
+        sys.exit()
     unittest.main()
+    app.exec_()
+
+
+if __name__ == '__main__':
+    main()
