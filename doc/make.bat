@@ -7,6 +7,7 @@ REM Command file for Sphinx documentation
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
 )
+set SPHINXBUILD="C:\Users\Shawn.C0NWAY\AppData\Local\Programs\Python\Python38\Scripts\sphinx-build.exe"
 set SOURCEDIR=.
 set BUILDDIR=_build
 

@@ -96,101 +96,115 @@ Learning a few of these shortcuts can save you a bunch of time!
    :header-rows: 1
    :widths: 15 20
 
-   * - Shortcut
-     - Action
-   * - :kbd:`Ctrl` + :kbd:`H`
-     - About OpenShot
-   * - :kbd:`Ctrl` + :kbd:`M`
-     - Add Marker
-   * - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`T`
-     - Add Track
-   * - :kbd:`Ctrl` + :kbd:`W`
-     - Add to Timeline
-   * - :kbd:`Ctrl` + :kbd:`B`
-     - Animated Title
-   * - :kbd:`Ctrl` + :kbd:`P`
-     - Choose Profile
-   * - :kbd:`Ctrl` + :kbd:`C`
-     - Copy
-   * - :kbd:`Delete`
-     - Delete Item
-   * - :kbd:`Backspace`
-     - Delete Item
-   * - :kbd:`Ctrl` + :kbd:`D`
-     - Details View
-   * - :kbd:`Ctrl` + :kbd:`E`
-     - Export Video
-   * - :kbd:`L`
-     - Fast Forward
-   * - :kbd:`F11`
-     - Fullscreen
-   * - :kbd:`Ctrl` + :kbd:`F`
-     - Import Files
-   * - :kbd:`Ctrl` + :kbd:`End`
-     - Jump to End
-   * - :kbd:`Ctrl` + :kbd:`Home`
-     - Jump to Start
-   * - :kbd:`Ctrl` + :kbd:`N`
-     - New Project
-   * - :kbd:`Right`
-     - Next Frame
-   * - :kbd:`Ctrl` + :kbd:`Right`
-     - Next Marker
-   * - :kbd:`Ctrl` + :kbd:`O`
-     - Open Project
-   * - :kbd:`Ctrl` + :kbd:`V`
-     - Paste
-   * - :kbd:`Space`
-     - Play/Pause Toggle
-   * - :kbd:`Up`
-     - Play/Pause Toggle
-   * - :kbd:`Down`
-     - Play/Pause Toggle
-   * - :kbd:`K`
-     - Play/Pause Toggle
-   * - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`P`
-     - Preferences
-   * - :kbd:`Left`
-     - Previous Frame
-   * - :kbd:`Ctrl` + :kbd:`Left`
-     - Previous Marker
-   * - :kbd:`Ctrl` + :kbd:`I`
-     - Properties
-   * - :kbd:`Ctrl` + :kbd:`Q`
-     - Quit
-   * - :kbd:`Ctrl` + :kbd:`Y`
-     - Redo
-   * - :kbd:`J`
-     - Rewind
-   * - :kbd:`Ctrl` + :kbd:`S`
-     - Save Project
-   * - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`S`
-     - Save Project As...
-   * - :kbd:`Ctrl` + :kbd:`A`
-     - Select All
-   * - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`A`
-     - Select None
-   * - :kbd:`Ctrl` + :kbd:`K`
-     - Slice All: Keep Both Sides
-   * - :kbd:`Ctrl` + :kbd:`L`
-     - Slice All: Keep Left Side
-   * - :kbd:`Ctrl` + :kbd:`J`
-     - Slice All: Keep Right Side
-   * - :kbd:`Ctrl` + :kbd:`G`
-     - Toggle Snapping
-   * - :kbd:`Ctrl` + :kbd:`X`
-     - Split Clip
-   * - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`D`
-     - Thumbnail View
-   * - :kbd:`Ctrl` + :kbd:`T`
-     - Title Editor
-   * - :kbd:`Ctrl` + :kbd:`Z`
-     - Undo
-   * - :kbd:`=`
-     - Zoom In
-   * - :kbd:`-`
-     - Zoom Out
-   * - :kbd:`Ctrl` + Scroll
-     - Zoom In/Out
-   * - :kbd:`Ctrl` + Middle Button
-     - Scroll Timeline
+   * - Action 
+     - Shortcut 
+   * - About OpenShot 
+     - :kbd:`Ctrl` + :kbd:`H` 
+   * - Add Marker 
+     - :kbd:`Ctrl` + :kbd:`M` 
+   * - Add Track 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`T` 
+   * - Add to Timeline 
+     - :kbd:`Ctrl` + :kbd:`W` 
+   * - Animated Title 
+     - :kbd:`Ctrl` + :kbd:`B` 
+   * - Center on Playhead 
+     - :kbd:`Ctrl` + :kbd:`Up` 
+   * - Choose Profile 
+     - :kbd:`Ctrl` + :kbd:`P` 
+   * - Copy 
+     - :kbd:`Ctrl` + :kbd:`C` 
+   * - Delete Item 
+     - :kbd:`Delete` 
+   * - Delete Item 
+     - :kbd:`Backspace` 
+   * - Details View 
+     - :kbd:`Ctrl` + :kbd:`D` 
+   * - Duplicate Title 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`C` 
+   * - Export Video 
+     - :kbd:`Ctrl` + :kbd:`E` 
+   * - Fast Forward 
+     - :kbd:`L` 
+   * - Fullscreen 
+     - :kbd:`F11` 
+   * - Import Files 
+     - :kbd:`Ctrl` + :kbd:`F` 
+   * - Insert Keyframe 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`E` 
+   * - Jump to End 
+     - :kbd:`Ctrl` + :kbd:`End` 
+   * - Jump to Start 
+     - :kbd:`Ctrl` + :kbd:`Home` 
+   * - New Project 
+     - :kbd:`Ctrl` + :kbd:`N` 
+   * - Next Frame 
+     - :kbd:`Right` 
+   * - Next Marker 
+     - :kbd:`Ctrl` + :kbd:`Right` 
+   * - Open Project 
+     - :kbd:`Ctrl` + :kbd:`O` 
+   * - Paste 
+     - :kbd:`Ctrl` + :kbd:`V` 
+   * - Play/Pause Toggle 
+     - :kbd:`Space` 
+   * - Play/Pause Toggle 
+     - :kbd:`Up` 
+   * - Play/Pause Toggle 
+     - :kbd:`Down` 
+   * - Play/Pause Toggle 
+     - :kbd:`K` 
+   * - Preferences 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`P` 
+   * - Previous Frame 
+     - :kbd:`Left` 
+   * - Previous Marker 
+     - :kbd:`Ctrl` + :kbd:`Left` 
+   * - Properties 
+     - :kbd:`Ctrl` + :kbd:`I` 
+   * - Quit 
+     - :kbd:`Ctrl` + :kbd:`Q` 
+   * - Redo 
+     - :kbd:`Ctrl` + :kbd:`Y` 
+   * - Rewind 
+     - :kbd:`J` 
+   * - Save Project 
+     - :kbd:`Ctrl` + :kbd:`S` 
+   * - Save Project As... 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`S` 
+   * - Scroll Timeline 
+     - :kbd:`Alt` + Middle Mouse Button 
+   * - Select All 
+     - :kbd:`Ctrl` + :kbd:`A` 
+   * - Select None 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`A` 
+   * - Slice All: Keep Both Sides 
+     - :kbd:`Ctrl` + :kbd:`K` 
+   * - Slice All: Keep Left Side 
+     - :kbd:`Ctrl` + :kbd:`L` 
+   * - Slice All: Keep Right Side 
+     - :kbd:`Ctrl` + :kbd:`J` 
+   * - Slice Selected: Keep Both Sides 
+     - :kbd:`Ctrl` + :kbd:`s` 
+   * - Slice Selected: Keep Left Side 
+     - :kbd:`Ctrl` + :kbd:`d` 
+   * - Slice Selected: Keep Right Side 
+     - :kbd:`Ctrl` + :kbd:`a` 
+   * - Toggle Snapping 
+     - :kbd:`Ctrl` + :kbd:`G` 
+   * - Split Clip 
+     - :kbd:`Ctrl` + :kbd:`X` 
+   * - Thumbnail View 
+     - :kbd:`Ctrl` + :kbd:`Shift` + :kbd:`D` 
+   * - Title Editor 
+     - :kbd:`Ctrl` + :kbd:`T` 
+   * - Toggle Editor 
+     - :kbd:`Ctrl` + :kbd:`R` 
+   * - Undo 
+     - :kbd:`Ctrl` + :kbd:`Z` 
+   * - Zoom In 
+     - :kbd:`=` 
+   * - Zoom Out 
+     - :kbd:`-` 
+   * - Zoom In / Out 
+     - :kbd:`Ctrl` + Middle Mouse Button
